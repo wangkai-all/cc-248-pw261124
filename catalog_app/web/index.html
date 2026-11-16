@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>产品目录采集控制台</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header>
+  <h1>产品目录采集控制台</h1>
+  <div class="sub">独立修订来源 · 条件读取闭合 · 版本发布围栏 · 断点续采</div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="source">来源对象</button>
+  <button class="tab" data-tab="collect">采集与闭合</button>
+  <button class="tab" data-tab="tasks">任务</button>
+  <button class="tab" data-tab="versions">版本存储</button>
+  <button class="tab" data-tab="requests">原始请求</button>
+</nav>
+
+<main>
+  <!-- ================= source ================= -->
+  <section id="tab-source" class="panel active">
+    <div class="row">
+      <button id="btn-refresh-state" class="primary">刷新来源状态</button>
+      <span class="hint">每个对象独立修订（_rev / ETag），无跨对象事务</span>
+    </div>
+    <div id="source-grid" class="grid"></div>
+
+    <h2>来源控制面板</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>更新对象（修订号 +1）</h3>
+        <select id="upd-type"></select>
+        <select id="upd-id"></select>
+        <textarea id="upd-body" rows="6"
+          placeholder="完整对象 JSON（PUT 替换）"></textarea>
+        <label>条件写入 <input id="upd-ifmatch" placeholder="If-Match ETag（可选）"></label>
+        <button id="btn-update">PUT 更新</button>
+        <div id="upd-result" class="result"></div>
+      </div>
+
+      <div class="card">
+        <h3>删除对象（墓碑）</h3>
+        <select id="del-type"></select>
+        <select id="del-id"></select>
+        <label>条件删除 <input id="del-ifmatch" placeholder="If-Match ETag（可选）"></label>
+        <button id="btn-delete" class="danger">DELETE 删除</button>
+        <div id="del-result" class="result"></div>
+      </div>
+
+      <div class="card">
+        <h3>故障注入（请求失败）</h3>
+        <input id="fault-oids" placeholder="如 dataset/sales,field/amount">
+        <label>HTTP 状态 <input id="fault-status" type="number" value="500" style="width:6em"></label>
+        <label>次数 <input id="fault-times" type="number" value="2" style="width:6em"></label>
+        <label class="inline"><input id="fault-persistent" type="checkbox"> 持续故障</label>
+        <button id="btn-fault">注入故障</button>
+        <button id="btn-fault-clear">清除故障</button>
+        <div id="fault-result" class="result"></div>
+      </div>
+
+      <div class="card">
+        <h3>调度并发更新（条件冲突）</h3>
+        <select id="sch-type"></select>
+        <select id="sch-id"></select>
+        <label>第 N 次 GET 时生效 <input id="sch-onget" type="number" value="2" style="width:5em"></label>
+        <textarea id="sch-patch" rows="3"
+          placeholder='补丁 JSON，如 {"name":"新名称"}'></textarea>
+        <button id="btn-schedule">调度更新</button>
+        <button id="btn-schedule-clear">清除调度</button>
+        <div id="sch-result" class="result"></div>
+      </div>
+
+      <div class="card wide">
+        <h3>一键场景</h3>
+        <button data-scene="cycle">构造循环引用</button>
+        <button data-scene="missing">删除被引用字段（断链）</button>
+        <button data-scene="conflict">遍历中更新数据集（条件冲突）</button>
+        <button data-scene="flaky">采集期间两次 500 后恢复</button>
+        <button data-scene="reset">重置全部注入</button>
+        <div id="scene-result" class="result"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= collect ================= -->
+  <section id="tab-collect" class="panel">
+    <div class="card">
+      <h3>发起采集任务</h3>
+      <div class="row">
+        <label>目录
+          <select id="col-catalog">
+            <option value="main">catalog/main（正常目录）</option>
+            <option value="with-ghost">catalog/with-ghost（含断链）</option>
+          </select>
+        </label>
+        <label>闭合策略
+          <select id="col-strategy">
+            <option value="pin">pin — 递归钉版本 + 条件闭合核对</option>
+            <option value="recheck">recheck — 反复核对到稳定</option>
+          </select>
+        </label>
+        <label class="inline"><input id="col-sync" type="checkbox"> 同步等待结果</label>
+        <button id="btn-collect" class="primary">开始采集</button>
+      </div>
+      <div id="collect-result" class="result"></div>
+      <p class="hint">
+        pin：先递归钉住每个对象的 rev/ETag，再用 If-None-Match 全量闭合核对，
+        任何 412/变化即判定条件冲突，拒绝拼合新旧修订。<br>
+        recheck：整图多轮核对，某一轮全部 304 才算稳定；轮数有上限，持续变化则判定 unstable。
+      </p>
+    </div>
+    <div class="card">
+      <h3>恢复进度</h3>
+      <p class="hint">失败任务保留已钉引用（请求失败不会删除引用），续采时先条件读取缓存，仅重新拉取漂移对象。</p>
+      <div id="resume-area"></div>
+    </div>
+  </section>
+
+  <!-- ================= tasks ================= -->
+  <section id="tab-tasks" class="panel">
+    <div class="row">
+      <button id="btn-refresh-tasks" class="primary">刷新任务列表</button>
+      <select id="task-select"></select>
+      <button id="btn-load-task">查看任务详情</button>
+    </div>
+    <div id="task-detail"></div>
+  </section>
+
+  <!-- ================= versions ================= -->
+  <section id="tab-versions" class="panel">
+    <div class="row">
+      <button id="btn-refresh-versions" class="primary">刷新版本</button>
+      <select id="version-select"></select>
+      <button id="btn-load-version">查看版本快照</button>
+    </div>
+    <div id="version-fence"></div>
+    <div id="version-detail"></div>
+  </section>
+
+  <!-- ================= requests ================= -->
+  <section id="tab-requests" class="panel">
+    <div class="row">
+      <button id="btn-refresh-req" class="primary">刷新请求日志</button>
+      <label>按任务过滤 <input id="req-filter" placeholder="task_id（可空）"></label>
+      <button id="btn-clear-req" class="danger">清空日志</button>
+    </div>
+    <div class="hint">展示来源返回的原始响应（含状态码、ETag、x-rev、墓碑头与响应体）。</div>
+    <table id="req-table">
+      <thead><tr>
+        <th>#</th><th>方法</th><th>路径</th><th>状态</th>
+        <th>条件头</th><th>任务</th><th>原始响应</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

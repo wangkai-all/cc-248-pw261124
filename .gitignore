@@ -7,6 +7,8 @@ node_modules/
 __pycache__/
 .claude/
 .cc-workbench/
+# runtime version/task storage (regenerated on server start)
+/data/
 .next/
 .nuxt/
 target/
